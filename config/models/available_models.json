@@ -1,0 +1,40 @@
+{
+  "models": {
+    "fast": [
+      {"id": "claude-haiku-4-5-20251001", "provider": "anthropic", "cost": "low", "notes": "Rápido y barato, ideal para tareas simples"},
+      {"id": "gpt-4o-mini", "provider": "openai", "cost": "low"},
+      {"id": "gemini/gemini-1.5-flash", "provider": "google", "cost": "low"},
+      {"id": "ollama/llama3", "provider": "local", "cost": "free", "notes": "Sin costo, requiere Ollama corriendo"}
+    ],
+    "smart": [
+      {"id": "claude-sonnet-4-6", "provider": "anthropic", "cost": "medium", "notes": "Recomendado para la mayoría de tareas"},
+      {"id": "gpt-4o", "provider": "openai", "cost": "medium"},
+      {"id": "gemini/gemini-1.5-pro", "provider": "google", "cost": "medium"}
+    ],
+    "powerful": [
+      {"id": "claude-opus-4-7", "provider": "anthropic", "cost": "high", "notes": "Reservar para razonamiento muy complejo"},
+      {"id": "gpt-4o", "provider": "openai", "cost": "high"}
+    ],
+    "local": [
+      {"id": "ollama/llama3", "provider": "local", "cost": "free"},
+      {"id": "ollama/mistral", "provider": "local", "cost": "free"},
+      {"id": "ollama/phi3", "provider": "local", "cost": "free", "notes": "Muy ligero, para hardware limitado"}
+    ]
+  },
+  "routing_rules": {
+    "simple_query": "fast",
+    "complex_reasoning": "smart",
+    "sensitive_data": "local",
+    "code_generation": "smart",
+    "document_creation": "smart",
+    "voice_response": "fast",
+    "agent_creation": "powerful",
+    "data_analysis": "smart"
+  },
+  "fallback_chain": ["smart", "fast", "local"],
+  "cost_optimization": {
+    "prefer_local_for_sensitive": true,
+    "cache_repeated_queries": true,
+    "downgrade_on_budget_limit": true
+  }
+}
