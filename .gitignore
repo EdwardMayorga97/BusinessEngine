@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+
+# Variables de entorno (nunca versionar)
+.env
+.env.local
+.env.*.local
+
+# Storage runtime (datos reales, no código)
+storage/data/
+storage/uploads/
+storage/tmp/
+!storage/.gitkeep
+
+# Base de datos local
+*.db
+*.sqlite3
+
+# Node / Frontend
+web/node_modules/
+web/dist/
+web/.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+
+# Logs
+*.log
+logs/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker volumes (runtime)
+.docker/

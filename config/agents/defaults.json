@@ -1,0 +1,41 @@
+{
+  "base_agents": [
+    "inventory",
+    "billing",
+    "email",
+    "calendar",
+    "reports",
+    "devops"
+  ],
+  "default_personality": {
+    "tone": "profesional",
+    "style": "conciso",
+    "traits": ["preciso", "confiable", "proactivo"],
+    "language": "es",
+    "response_format": "both"
+  },
+  "default_autonomy": {
+    "auto_execute": ["consultar", "buscar", "leer", "listar"],
+    "notify_after": ["crear", "actualizar", "enviar", "programar"],
+    "require_approval": ["eliminar", "pagar", "contratar", "firmar", "publicar"]
+  },
+  "default_model": {
+    "primary": "claude-sonnet-4-6",
+    "fallback": "gpt-4o-mini",
+    "local_fallback": "ollama/llama3"
+  },
+  "memory_config": {
+    "short_term_ttl_hours": 24,
+    "medium_term_days": 90,
+    "long_term": "permanent"
+  },
+  "critical_actions_always_require_approval": [
+    "contratos",
+    "cotizaciones_grandes",
+    "pagos",
+    "transferencias",
+    "eliminacion_masiva",
+    "cambio_precios_mayor",
+    "comunicaciones_legales"
+  ]
+}

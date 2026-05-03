@@ -1,0 +1,45 @@
+{
+  "app": {
+    "name": "BusinessEngine",
+    "version": "0.1.0"
+  },
+  "voice": {
+    "stt_engine": "whisper",
+    "whisper_model": "base",
+    "tts_engine": "kokoro",
+    "always_listening": true,
+    "silence_timeout_seconds": 2
+  },
+  "security": {
+    "jwt_expiration_hours": 8,
+    "session_timeout_minutes": 60,
+    "max_login_attempts": 5,
+    "encrypt_sensitive_memory": true,
+    "audit_trail_immutable": true
+  },
+  "limits": {
+    "max_tokens_per_request": 4096,
+    "max_requests_per_minute": 60,
+    "max_file_size_mb": 50,
+    "max_concurrent_agents_per_company": 10,
+    "job_timeout_seconds": 60
+  },
+  "automation": {
+    "detect_repetitive_tasks": true,
+    "suggest_after_occurrences": 5,
+    "auto_approve_low_risk": false,
+    "monitoring_period_new_company_days": 14
+  },
+  "data": {
+    "soft_delete_only": true,
+    "version_all_changes": true,
+    "backup_cron": "0 2 * * *",
+    "cleanup_short_memory_cron": "0 3 * * *"
+  },
+  "self_improvement": {
+    "devops_agent_enabled": true,
+    "auto_apply_low_risk_improvements": true,
+    "require_approval_for_code_changes": true,
+    "health_check_interval_seconds": 30
+  }
+}
