@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>3D Terrain Generator</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://esm.sh/three@0.170.0",
+      "three/addons/": "https://esm.sh/three@0.170.0/addons/"
+    }
+  }
+  </script>
+  <style>
+    *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;overflow:hidden;background:#050d1a;font-family:'Segoe UI',monospace}
+    canvas{display:block}
+    input[type=range]{-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;background:#1a3a5a;outline:none;width:100%}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#3a9fd8;cursor:pointer;border:2px solid #1a6090}
+    button{font-family:inherit;cursor:pointer;transition:opacity .15s}
+    button:active{opacity:.7}
+  </style>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── Simplex Noise (Gustavson 2D) ──────────────────────────────────────────
+const GRAD2=[[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[1,0],[-1,0],[0,1],[0,-1],[0,1],[0,-1]];
+class SimplexNoise{
+  constructor(seed=0){
+    this.perm=new Uint8Array(512);this.pm12=new Uint8Array(512);
+    const p=new Uint8Array(256);for(let i=0;i<256;i++)p[i]=i;
+    let s=(seed^0xdeadbeef)>>>0;
+    for(let i=255;i>0;i--){s=(Math.imul(s,1664525)+1013904223)>>>0;const j=s%(i+1);const t=p[i];p[i]=p[j];p[j]=t;}
+    for(let i=0;i<512;i++){this.perm[i]=p[i&255];this.pm12[i]=this.perm[i]%12;}
+  }
+  noise2D(xi,yi){
+    const F2=.5*(Math.sqrt(3)-1),G2=(3-Math.sqrt(3))/6;
+    const s=(xi+yi)*F2,i=Math.floor(xi+s),j=Math.floor(yi+s),t=(i+j)*G2;
+    const x0=xi-(i-t),y0=yi-(j-t);
+    const i1=x0>y0?1:0,j1=x0>y0?0:1;
+    const x1=x0-i1+G2,y1=y0-j1+G2,x2=x0-1+2*G2,y2=y0-1+2*G2;
+    const ii=i&255,jj=j&255;
+    const g0=GRAD2[this.pm12[ii+this.perm[jj]]];
+    const g1=GRAD2[this.pm12[ii+i1+this.perm[jj+j1]]];
+    const g2=GRAD2[this.pm12[ii+1+this.perm[jj+1]]];
+    let n0=0,n1=0,n2=0;
+    const t0=.5-x0*x0-y0*y0;if(t0>0){const q=t0*t0;n0=q*q*(g0[0]*x0+g0[1]*y0);}
+    const t1=.5-x1*x1-y1*y1;if(t1>0){const q=t1*t1;n1=q*q*(g1[0]*x1+g1[1]*y1);}
+    const t2=.5-x2*x2-y2*y2;if(t2>0){const q=t2*t2;n2=q*q*(g2[0]*x2+g2[1]*y2);}
+    return 70*(n0+n1+n2);
+  }
+  fbm(x,y,oct){let v=0,a=1,f=1,m=0;for(let i=0;i<oct;i++){v+=this.noise2D(x*f,y*f)*a;m+=a;a*=.5;f*=2;}return v/m;}
+}
+
+// ── Biomes ────────────────────────────────────────────────────────────────
+const BIOMES=[
+  {t:0.00,c:new THREE.Color(0x04111f)},{t:0.12,c:new THREE.Color(0x0d2d5a)},
+  {t:0.21,c:new THREE.Color(0x1a5090)},{t:0.25,c:new THREE.Color(0x2470b8)},
+  {t:0.28,c:new THREE.Color(0xe8d89a)},{t:0.32,c:new THREE.Color(0x8ec84e)},
+  {t:0.47,c:new THREE.Color(0x52a028)},{t:0.60,c:new THREE.Color(0x387018)},
+  {t:0.68,c:new THREE.Color(0x605545)},{t:0.78,c:new THREE.Color(0x7a6e68)},
+  {t:0.88,c:new THREE.Color(0x908880)},{t:0.94,c:new THREE.Color(0xcfcbc8)},
+  {t:1.00,c:new THREE.Color(0xf8f8f8)},
+];
+function biomeColor(n){
+  if(n<=BIOMES[0].t)return BIOMES[0].c.clone();
+  for(let i=1;i<BIOMES.length;i++){
+    if(n<=BIOMES[i].t){
+      const a=(n-BIOMES[i-1].t)/(BIOMES[i].t-BIOMES[i-1].t);
+      return BIOMES[i-1].c.clone().lerp(BIOMES[i].c,Math.max(0,Math.min(1,a)));
+    }
+  }
+  return BIOMES[BIOMES.length-1].c.clone();
+}
+function smoothstep(e0,e1,x){const t=Math.max(0,Math.min(1,(x-e0)/(e1-e0)));return t*t*(3-2*t);}
+
+// ── Renderer / Scene / Camera ─────────────────────────────────────────────
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+document.body.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x8bc4e8);
+scene.fog=new THREE.FogExp2(0xbedde8,0.0016);
+
+const camera=new THREE.PerspectiveCamera(65,innerWidth/innerHeight,.5,3000);
+camera.position.set(0,180,350);
+
+const orbit=new OrbitControls(camera,renderer.domElement);
+orbit.enableDamping=true;orbit.dampingFactor=.06;
+orbit.minDistance=30;orbit.maxDistance=1000;
+orbit.maxPolarAngle=Math.PI/2.05;
+orbit.target.set(0,10,0);
+
+// Lights
+const sun=new THREE.DirectionalLight(0xfff4d6,1.8);
+sun.position.set(200,400,150);sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=sun.shadow.camera.bottom=-380;
+sun.shadow.camera.right=sun.shadow.camera.top=380;
+sun.shadow.camera.far=1400;sun.shadow.bias=-0.0003;
+scene.add(sun);
+scene.add(new THREE.AmbientLight(0x7090b0,.8));
+scene.add(new THREE.HemisphereLight(0x87ceeb,0x2d4a1e,.5));
+const sunDisc=new THREE.Mesh(new THREE.SphereGeometry(14,16,8),new THREE.MeshBasicMaterial({color:0xfff280}));
+sunDisc.position.copy(sun.position).normalize().multiplyScalar(900);
+scene.add(sunDisc);
+
+// ── Build terrain + water ─────────────────────────────────────────────────
+let tMesh=null,tMat=null,wMesh=null,wMat=null,polys=0;
+
+function rebuild(cfg){
+  if(tMesh)scene.remove(tMesh);
+  if(wMesh)scene.remove(wMesh);
+  const {width,depth,resolution,heightScale,frequency,octaves,seed,islandMode}=cfg;
+  const segs=resolution-1;
+  const geo=new THREE.PlaneGeometry(width,depth,segs,segs);
+  geo.rotateX(-Math.PI/2);
+  const pos=geo.attributes.position;
+  const ca=new Float32Array(pos.count*3);
+  const col=new THREE.BufferAttribute(ca,3);
+  const noise=new SimplexNoise(seed);
+  const hw=width/2,hd=depth/2;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i),z=pos.getZ(i);
+    let n=(noise.fbm(x*frequency,z*frequency,octaves)+1)*.5;
+    if(islandMode){const nx=x/hw,nz=z/hd,d=Math.sqrt(nx*nx+nz*nz)/Math.SQRT2;n*=(1-smoothstep(.30,.88,d));}
+    n=Math.max(0,Math.min(1,n));
+    pos.setY(i,n*heightScale);
+    const c=biomeColor(n);col.setXYZ(i,c.r,c.g,c.b);
+  }
+  geo.setAttribute('color',col);geo.computeVertexNormals();
+  tMat=new THREE.MeshPhongMaterial({vertexColors:true,shininess:6});
+  tMesh=new THREE.Mesh(geo,tMat);tMesh.castShadow=tMesh.receiveShadow=true;
+  scene.add(tMesh);
+  polys=segs*segs*2;
+  const seaY=heightScale*.22;
+  const wg=new THREE.PlaneGeometry(width*1.6,depth*1.6,1,1);
+  wMat=new THREE.MeshPhongMaterial({color:new THREE.Color(0x1a5fa8),transparent:true,opacity:.68,shininess:200,specular:new THREE.Color(0xaaddff),depthWrite:false});
+  wMesh=new THREE.Mesh(wg,wMat);wMesh.rotation.x=-Math.PI/2;wMesh.position.y=seaY+.2;wMesh.renderOrder=1;
+  scene.add(wMesh);
+}
+
+const cfg={width:500,depth:500,resolution:256,heightScale:80,frequency:0.004,octaves:7,seed:42,islandMode:true};
+rebuild(cfg);
+
+// ── UI Panel ──────────────────────────────────────────────────────────────
+const panel=document.createElement('div');
+Object.assign(panel.style,{
+  position:'fixed',top:'12px',left:'12px',
+  background:'rgba(6,10,22,0.92)',border:'1px solid rgba(80,180,255,0.28)',
+  borderRadius:'10px',padding:'14px 14px',color:'#c8e4ff',fontSize:'12px',
+  width:'230px',backdropFilter:'blur(12px)',zIndex:'10',
+  boxShadow:'0 6px 32px rgba(0,0,0,.6)',userSelect:'none',
+});
+
+function row(label,id,value,min,max,step,fmt){
+  const w=document.createElement('div');w.style.marginBottom='9px';
+  const h=document.createElement('div');
+  Object.assign(h.style,{display:'flex',justifyContent:'space-between',color:'#7ab8d8',marginBottom:'3px'});
+  const l=document.createElement('span');l.textContent=label;
+  const v=document.createElement('span');v.id=id+'-val';v.textContent=fmt(value);
+  v.style.color='#a0d8ff';h.appendChild(l);h.appendChild(v);w.appendChild(h);
+  const inp=document.createElement('input');inp.type='range';
+  inp.id=id;inp.value=value;inp.min=min;inp.max=max;inp.step=step;
+  inp.style.accentColor='#3a9fd8';
+  inp.addEventListener('input',()=>v.textContent=fmt(parseFloat(inp.value)));
+  w.appendChild(inp);panel.appendChild(w);return inp;
+}
+
+const title=document.createElement('div');
+Object.assign(title.style,{fontSize:'13px',fontWeight:'700',color:'#60c8ff',marginBottom:'12px',letterSpacing:'1.5px'});
+title.textContent='⛰  Terrain Generator';panel.appendChild(title);
+
+// Seed row
+const seedRow=document.createElement('div');seedRow.style.marginBottom='9px';
+const seedLbl=document.createElement('div');seedLbl.textContent='Seed';seedLbl.style.color='#7ab8d8';seedLbl.style.marginBottom='3px';
+const seedWrap=document.createElement('div');Object.assign(seedWrap.style,{display:'flex',gap:'6px'});
+const seedInp=document.createElement('input');seedInp.type='number';seedInp.value='42';seedInp.min='0';seedInp.max='999999';
+Object.assign(seedInp.style,{flex:'1',background:'#080e1c',border:'1px solid #1a3a58',color:'#c8e4ff',borderRadius:'5px',padding:'5px 7px',fontSize:'12px'});
+const rndBtn=document.createElement('button');rndBtn.textContent='🎲';
+Object.assign(rndBtn.style,{padding:'5px 8px',background:'rgba(26,60,90,.8)',color:'#7ab8d8',border:'1px solid #1a4060',borderRadius:'5px',fontSize:'13px'});
+rndBtn.addEventListener('click',()=>{ seedInp.value=String(Math.floor(Math.random()*999999)); });
+seedWrap.appendChild(seedInp);seedWrap.appendChild(rndBtn);
+seedRow.appendChild(seedLbl);seedRow.appendChild(seedWrap);
+panel.appendChild(seedRow);
+
+const hEl =row('Height Scale','hs', cfg.heightScale,  10,150,1,  v=>`${v} m`);
+const fEl =row('Frequency',   'fr', cfg.frequency*10000, 5,120,.5, v=>`${(v/10000).toFixed(4)}`);
+const oEl =row('Octaves',     'oc', cfg.octaves,         1, 10,1,  v=>`${v}`);
+
+function chkRow(lbl,checked){
+  const r=document.createElement('div');
+  Object.assign(r.style,{display:'flex',alignItems:'center',gap:'8px',margin:'7px 0'});
+  const i=document.createElement('input');i.type='checkbox';i.checked=checked;
+  Object.assign(i.style,{width:'15px',height:'15px',cursor:'pointer',accentColor:'#3a9fd8'});
+  const l=document.createElement('label');l.textContent=lbl;l.style.cursor='pointer';
+  r.appendChild(i);r.appendChild(l);panel.appendChild(r);return i;
+}
+const islandChk=chkRow('Island Mode',true);
+const wireChk  =chkRow('Wireframe',false);
+
+const genBtn=document.createElement('button');genBtn.textContent='⟳  GENERATE TERRAIN';
+Object.assign(genBtn.style,{
+  width:'100%',padding:'10px',marginTop:'6px',
+  background:'linear-gradient(135deg,#1a5fa8,#0d3266)',
+  color:'#fff',border:'1px solid #3a9fd8',
+  borderRadius:'6px',fontSize:'12px',fontWeight:'700',letterSpacing:'.5px',
+});
+genBtn.addEventListener('click',()=>{
+  cfg.seed=parseInt(seedInp.value)||42;
+  cfg.heightScale=parseFloat(hEl.value);
+  cfg.frequency=parseFloat(fEl.value)/10000;
+  cfg.octaves=parseInt(oEl.value);
+  cfg.islandMode=islandChk.checked;
+  rebuild(cfg);
+});
+panel.appendChild(genBtn);
+
+const hint=document.createElement('div');
+Object.assign(hint.style,{marginTop:'10px',color:'#3a7898',fontSize:'10px',lineHeight:'1.7'});
+hint.innerHTML='🖱 Drag: rotate &nbsp;|&nbsp; Pinch: zoom &nbsp;|&nbsp; 2 fingers: pan';
+panel.appendChild(hint);
+document.body.appendChild(panel);
+
+// ── Stats overlay ─────────────────────────────────────────────────────────
+const stats=document.createElement('div');
+Object.assign(stats.style,{
+  position:'fixed',top:'12px',right:'12px',
+  background:'rgba(6,10,22,.82)',border:'1px solid rgba(80,180,255,.18)',
+  borderRadius:'8px',padding:'10px 14px',color:'#60c8ff',
+  fontSize:'11px',fontFamily:'monospace',zIndex:'10',
+  backdropFilter:'blur(8px)',minWidth:'140px',lineHeight:'1.9',
+});
+stats.innerHTML='<div style="font-weight:700;margin-bottom:3px;color:#a0d8ff">STATS</div>';
+const fpsEl=document.createElement('div');fpsEl.textContent='FPS: --';
+const triEl=document.createElement('div');triEl.textContent='Tris: --';
+const inf=document.createElement('div');
+Object.assign(inf.style,{color:'#3a7898',marginTop:'5px',fontSize:'10px'});
+inf.innerHTML='Map: 500 × 500 m<br>Grid: 256 × 256';
+stats.appendChild(fpsEl);stats.appendChild(triEl);stats.appendChild(inf);
+document.body.appendChild(stats);
+
+// ── Resize ─────────────────────────────────────────────────────────────────
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+
+// ── Animate ───────────────────────────────────────────────────────────────
+const clock=new THREE.Clock();
+let frames=0,fpsTimer=0,fps=0,elapsed=0;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=clock.getDelta();
+  elapsed+=dt;orbit.update();
+  if(wMat){wMat.opacity=.62+Math.sin(elapsed*1.1)*.06;}
+  if(tMat)tMat.wireframe=wireChk.checked;
+  frames++;fpsTimer+=dt;
+  if(fpsTimer>=1){fps=frames;frames=0;fpsTimer-=1;}
+  fpsEl.textContent=`FPS: ${fps}`;
+  triEl.textContent=`Tris: ${polys.toLocaleString()}`;
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
