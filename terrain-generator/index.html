@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Terrain Generator</title>
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #050d1a;
+      font-family: 'Segoe UI', system-ui, monospace;
+    }
+    canvas { display: block; }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      border-radius: 2px;
+      background: #1a3a5a;
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #3a9fd8;
+      cursor: pointer;
+      border: 2px solid #1a6090;
+      transition: background 0.15s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      background: #60c8ff;
+    }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
